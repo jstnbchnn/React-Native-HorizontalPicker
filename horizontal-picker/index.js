@@ -1,23 +1,21 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
-  Dimensions,
 } from 'react-native';
 import PropTypes from 'prop-types';
 
 import ListItemNumber from '../ListItemNumber';
 
 const ITEM_WIDTH = 60;
-const LIST_OFFSET = (Dimensions.get('screen').width / 2) - (ITEM_WIDTH / 2);
 
 function createStyles({ backgroundColor, textColor }) {
   return StyleSheet.create({
     container: {
-      width: '100%',
       backgroundColor,
+      width: '100%',
       borderRadius: 50,
       borderTopLeftRadius: 0,
       borderTopRightRadius: 0,
@@ -47,38 +45,54 @@ function createStyles({ backgroundColor, textColor }) {
 
 export default function HorizontalPicker(props) {
   const {
+    initialValue,
     min,
     max,
-    textColor,
     backgroundColor,
-    initialValue,
+    textColor,
     onValueChange,
   } = props;
 
   const [selectedNumber, setSelectedNumber] = useState(initialValue);
+  const [listOffset, setListOffset] = useState(0);
   const length = max - min + 1;
   const range = new Array(length).fill().map((_, index) => index + min);
-  const styles = createStyles({ backgroundColor });
-
+  const styles = createStyles({ backgroundColor, textColor });
   const flatListRef = useRef(null);
 
-  function centerOnIndex(index) {
-    if (flatListRef.current) {
+  const centerOnIndex = (index) => {
+    if (flatListRef.current && index > -1) {
       flatListRef.current.scrollToIndex({ index, viewPosition: 0.5 });
     }
-  }
+  };
 
-  function updateSelectedNumber(number) {
+  const getSelectedIndexForNumber = (number) => range.findIndex(
+    (candidate) => candidate === number,
+  );
+
+  const updateSelectedNumber = (number) => {
     setSelectedNumber(number);
     onValueChange(number);
-    const index = range.findIndex((candidate) => candidate === number);
-    centerOnIndex(index);
-  }
+    centerOnIndex(getSelectedIndexForNumber(number));
+  };
 
-  // eslint-disable-next-line react/prop-types
-  const renderItem = ({ item }) => (
+  useEffect(() => {
+    updateSelectedNumber(selectedNumber);
+  }, [listOffset]);
+
+  const onLayout = ({ nativeEvent }) => {
+    const { width } = nativeEvent.layout;
+    setListOffset((width / 2) - (ITEM_WIDTH / 2));
+  };
+
+
+  const handleScrollEnd = () => {
+    centerOnIndex(getSelectedIndexForNumber(selectedNumber));
+  };
+
+  const renderItem = (info) => (
     <ListItemNumber
-      number={item}
+      number={info.item}
       textColor={textColor}
       updateSelectedNumber={updateSelectedNumber}
     />
@@ -91,18 +105,16 @@ export default function HorizontalPicker(props) {
     const halfOfViewport = viewPortWidth / 2;
     const middlepoint = contentOffsetX + halfOfViewport;
 
-    const withoutOffset = middlepoint - LIST_OFFSET;
+    const withoutOffset = middlepoint - listOffset;
     const calculatedIndex = Math.floor(withoutOffset / ITEM_WIDTH);
 
     const value = range[calculatedIndex];
     setSelectedNumber(value);
   };
 
-  function getInitialScrollIndex() {
-    return range.findIndex((item) => item === props.initialValue);
-  }
+  const getInitialScrollIndex = () => range.findIndex((item) => item === initialValue);
 
-  const flatlistSpacer = () => (<View style={{ width: LIST_OFFSET }} />);
+  const flatlistSpacer = () => (<View style={{ width: listOffset }} />);
 
   return (
     <View style={styles.container}>
@@ -117,10 +129,12 @@ export default function HorizontalPicker(props) {
         keyExtractor={(item, index) => `${item}-${index}`}
         data={range}
         renderItem={renderItem}
+        onLayout={onLayout}
+        onMomentumScrollEnd={handleScrollEnd}
         getItemLayout={(data, index) => (
-          { length: ITEM_WIDTH, offset: LIST_OFFSET + ITEM_WIDTH * index, index }
+          { length: ITEM_WIDTH, offset: listOffset + ITEM_WIDTH * index, index }
         )}
-        initialScrollIndex={getInitialScrollIndex() - 2.6}
+        initialScrollIndex={getInitialScrollIndex()}
         ListHeaderComponent={flatlistSpacer()}
         ListFooterComponent={flatlistSpacer()}
         onScroll={handleScroll}
